@@ -1,6 +1,6 @@
 module main.go
 
-go 1.16
+go 1.17
 
 require (
 	github.com/aler9/gomavlib v0.0.0-20210919135423-b36a27e9dcd9
