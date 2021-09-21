@@ -120,7 +120,6 @@ func runPixhawk(node *gomavlib.Node, chanPX4 chan bool) {
 			}
 		}
 	}
-
 }
 
 // Rutina de ejecución del Middleware Sensor de Proximidad
@@ -136,7 +135,6 @@ func runSensor(pin gpio.PinIn, chanSensor chan bool) {
 		// 	fmt.Println("NO DETECTO")
 		// }
 	}
-
 }
 
 // Maneja el estado de la aplicación
@@ -175,28 +173,28 @@ func goduxApp(chanSensor chan bool, chanPX4 chan bool) {
 
 	for { // Quedo a la espera de mensajes provenientes de los canales
 		select {
-		case <-chanPX4:
-
-			// fmt.Println("Estado actual, Running:", store.GetState("Running"))
-
-			if store.GetState("Running") == true { // Si está en movimiento y llega la alerta PX4, lo detengo
-				newStatus := store.Dispatch(stop())
-				store.SetState("Running", newStatus)
-				fmt.Println("ALERTA PX4!!!, Vehículo en movimiento: ", newStatus.(bool))
-			} else {
-				fmt.Println("LLegó la alerta PX4, pero el vehículo ya se encuentra detenido")
-			}
-
 		case <-chanSensor:
 
 			// fmt.Println("Estado actual, Running:", store.GetState("Running"))
 
-			if store.GetState("Running") == false { // Si está detenido y llega la alerta Sensor, lo pongo en movimiento
+			if store.GetState("Running") == true { // Si está en movimiento y llega la alerta Sensor, lo detengo
+				newStatus := store.Dispatch(stop())
+				store.SetState("Running", newStatus)
+				fmt.Println("ALERTA Sensor!!!, Vehículo en movimiento: ", newStatus.(bool))
+			} else {
+				fmt.Println("LLegó la alerta Sensor, pero el vehículo ya se encuentra detenido")
+			}
+
+		case <-chanPX4:
+
+			// fmt.Println("Estado actual, Running:", store.GetState("Running"))
+
+			if store.GetState("Running") == false { // Si está detenido y llega la alerta PX4, lo pongo en movimiento
 				newStatus := store.Dispatch(run())
 				store.SetState("Running", newStatus)
-				fmt.Println("ALERTA SENSOR!!!, Vehículo en movimiento: ", newStatus.(bool))
+				fmt.Println("ALERTA PX4!!!, Vehículo en movimiento: ", newStatus.(bool))
 			} else {
-				fmt.Println("LLegó la alerta Sensor, pero el vehículo ya se encuentra en movimiento")
+				fmt.Println("LLegó la alerta PX4, pero el vehículo ya se encuentra en movimiento")
 			}
 		}
 	}
