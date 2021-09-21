@@ -1,3 +1,7 @@
-# Proyecto Integrador
+# Desarrollo de Sistema de Conducción de Piloto Autónomo Para Vehículos Terrestres No Tripulados Multisensoriales
 
-Desarrollo de Sistema de Conducción de Piloto Autónomo Para Vehículos Terrestres No Tripulados Multisensoriales
+<center> <h3>
+Proyecto Integrador - Ingenería en Computación  <br>
+Facultad de Ciencias Exactas Físicas y Naturales - UNC 
+</h3>
+</center>
