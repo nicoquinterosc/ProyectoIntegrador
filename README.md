@@ -6,6 +6,7 @@ Facultad de Ciencias Exactas Físicas y Naturales - UNC
 </h3>
 </center>
 
+<br>
 
 Autor:
 Nicolás D. Quinteros Castilla
