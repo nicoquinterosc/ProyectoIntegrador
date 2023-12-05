@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"math"
 	"os"
-	"strings"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/bluenviron/gomavlib/v2"
@@ -62,15 +62,15 @@ func main() {
 	// }
 	go runSensor(sensors[0], chanSensor)
 
-	for {
-		reader := bufio.NewReader(os.Stdin)
-		text, _ := reader.ReadString('\n')
-		text = strings.Replace(text, "\n", "", -1)
-		if strings.Compare("exit", text) == 0 {
-			close(chanSensor)
-		}
-		continue
-	}
+	moveForward(mavlinkNode)
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGINT)
+	<-c
+	fmt.Println("\nFinalizando programa.")
+	stopMotors(mavlinkNode)
+	time.Sleep(100 * time.Millisecond)
+	os.Exit(0)
 }
 
 // Configuración del PX4
@@ -128,7 +128,7 @@ func runPixhawkSensor(node *gomavlib.Node, chanPX4 chan bool) {
 					if msg.Yaw*(180/math.Pi) > 40 {
 						// start = time.Now()
 
-						//chanPX4 <- true
+						chanPX4 <- true
 
 						// node.WriteMessageTo(frm.Channel, &ardupilotmega.MessageParamValue{
 						// 	ParamId:    "test_parameter",
@@ -175,7 +175,7 @@ func runSensor(sensor *hcsr04.HCSR04, chanSensor chan bool) error {
 			continue
 		}
 		fmt.Println("Distancia:", distance*100)
-		if (distance * 100) < 100 {
+		if (distance * 100) < 20 {
 			fmt.Println("DETECTO")
 			chanSensor <- true
 		} else {
@@ -236,6 +236,7 @@ func goduxApp(chanSensor chan bool, chanPX4 chan bool, chanPX4Comandos chan bool
 			fmt.Println("------------ LLEGÓ ALGO A CHAN SENSOR:  ", sensorValue)
 			// fmt.Println("Estado actual, Running:", store.GetState("Running"))
 			if !sensorValue {
+				fmt.Println("------------ CASO OMISO A CHAN SENSOR porque es false")
 				continue
 			}
 			if store.GetState("Running") == true { // Si está en movimiento y llega la alerta Sensor, lo detengo
@@ -273,12 +274,17 @@ func goduxApp(chanSensor chan bool, chanPX4 chan bool, chanPX4Comandos chan bool
 
 func moveForward(node *gomavlib.Node) {
 	fmt.Println("Por escribir mensaje para mover hacia adelante")
-	writeMessage(node, 500)
+	writeMessage(node, 1800)
 }
+
+// func moveBackward(node *gomavlib.Node) {
+// 	fmt.Println("Por escribir mensaje para mover hacia adelante")
+// 	writeMessage(node, 1600)
+// }
 
 func stopMotors(node *gomavlib.Node) {
 	fmt.Println("Por escribir mensaje para detener")
-	writeMessage(node, 1600)
+	writeMessage(node, 1700)
 }
 
 func writeMessage(node *gomavlib.Node, pulse float32) {
