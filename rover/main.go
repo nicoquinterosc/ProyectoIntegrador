@@ -37,6 +37,10 @@ func main() {
 	}
 	defer mavlinkNode.Close()
 
+	mavlink := &Mavlink{
+		Node: mavlinkNode,
+	}
+
 	// Apertura de puertos GPIO
 	if err := rpio.Open(); err != nil {
 		panic(err)
@@ -56,19 +60,19 @@ func main() {
 	// Inicio de rutinas
 	go goduxApp(chanSensor, chanPX4Sensado, chanPX4Comandos)
 	go runPixhawkSensor(mavlinkNode, chanPX4Sensado)
-	go runPixhawkActuador(mavlinkNode, chanPX4Comandos)
-	// for _, sensor := range sensors {
-	// 	go runSensor(sensor, chanSensor)
-	// }
-	go runSensor(sensors[0], chanSensor)
+	go mavlink.runPixhawkActuador(chanPX4Comandos)
+	for _, sensor := range sensors {
+		go runSensor(sensor, chanSensor)
+	}
+	// go runSensor(sensors[0], chanSensor)
 
-	moveForward(mavlinkNode)
+	mavlink.moveForward()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGINT)
 	<-c
 	fmt.Println("\nFinalizando programa.")
-	stopMotors(mavlinkNode)
+	mavlink.stopMotors()
 	time.Sleep(100 * time.Millisecond)
 	os.Exit(0)
 }
@@ -94,11 +98,11 @@ func configPixhawk() (*gomavlib.Node, error) {
 // func configSensors() (gpio.PinIn, error) {
 func configSensors() ([]*hcsr04.HCSR04, error) {
 	var sensors []*hcsr04.HCSR04
-	sensors = append(sensors, hcsr04.NewHCSR04(3, 2))
-	// sensors = append(sensors, hcsr04.NewHCSR04(17, 4))
-	// sensors = append(sensors, hcsr04.NewHCSR04(22, 27))
-	// sensors = append(sensors, hcsr04.NewHCSR04(23, 18))
-	// sensors = append(sensors, hcsr04.NewHCSR04(25, 24))
+	sensors = append(sensors, hcsr04.NewHCSR04(3, 2))   // #1
+	sensors = append(sensors, hcsr04.NewHCSR04(17, 4))  // #2
+	sensors = append(sensors, hcsr04.NewHCSR04(22, 27)) // #3
+	sensors = append(sensors, hcsr04.NewHCSR04(23, 18)) // #4
+	sensors = append(sensors, hcsr04.NewHCSR04(25, 24)) // #5
 	return sensors, nil
 }
 
@@ -144,17 +148,17 @@ func runPixhawkSensor(node *gomavlib.Node, chanPX4 chan bool) {
 }
 
 // Rutina de ejecución del Middleware Actuador Pixhawk
-func runPixhawkActuador(node *gomavlib.Node, chanPX4Comandos <-chan bool) {
+func (mavlink *Mavlink) runPixhawkActuador(chanPX4Comandos <-chan bool) {
 	for {
 		msg := <-chanPX4Comandos
 		fmt.Println("Llega dato por el canal al actuador:", msg)
 		if msg {
 			fmt.Println("PONER EN MOVIMIENTO")
 			// fmt.Println(time.Since(start))
-			moveForward(node)
+			mavlink.moveForward()
 		} else {
 			fmt.Println("GIRAR O DETENER")
-			stopMotors(node)
+			mavlink.stopMotors()
 		}
 	}
 }
@@ -272,34 +276,52 @@ func goduxApp(chanSensor chan bool, chanPX4 chan bool, chanPX4Comandos chan bool
 
 }
 
-func moveForward(node *gomavlib.Node) {
+type Mavlink struct {
+	Node *gomavlib.Node
+}
+
+var fowardPulse float32 = 1900
+var backwardPulse float32 = 1800
+var stopPulse float32 = 1850
+
+func (mavlink *Mavlink) moveForward() {
 	fmt.Println("Por escribir mensaje para mover hacia adelante")
-	writeMessage(node, 1800)
+	mavlink.sendPulse(fowardPulse, fowardPulse)
 }
 
-// func moveBackward(node *gomavlib.Node) {
-// 	fmt.Println("Por escribir mensaje para mover hacia adelante")
-// 	writeMessage(node, 1600)
-// }
+func (mavlink *Mavlink) moveBackward() {
+	fmt.Println("Por escribir mensaje para mover hacia adelante")
+	mavlink.sendPulse(backwardPulse, backwardPulse)
+}
 
-func stopMotors(node *gomavlib.Node) {
+func (mavlink *Mavlink) moveLeft() {
+	fmt.Println("Por escribir mensaje para mover hacia izquierda")
+	mavlink.sendPulse(fowardPulse, backwardPulse)
+}
+
+func (mavlink *Mavlink) moveRight() {
+	fmt.Println("Por escribir mensaje para mover hacia derecha")
+	mavlink.sendPulse(backwardPulse, fowardPulse)
+}
+
+func (mavlink *Mavlink) stopMotors() {
 	fmt.Println("Por escribir mensaje para detener")
-	writeMessage(node, 1700)
+	mavlink.sendPulse(stopPulse, stopPulse)
 }
 
-func writeMessage(node *gomavlib.Node, pulse float32) {
-	fmt.Println("Escribiendo pulso", pulse)
-	node.WriteMessageAll(&ardupilotmega.MessageCommandLong{
-		Param1:          1,     // Servo index
-		Param2:          pulse, // Servo position
+func (mavlink *Mavlink) sendPulse(pulseRightMotors float32, pulseLeftMotors float32) {
+	fmt.Println("Escribiendo pulsos: ", pulseRightMotors, pulseLeftMotors)
+	mavlink.Node.WriteMessageAll(&ardupilotmega.MessageCommandLong{
+		Param1:          1,                // Servo index
+		Param2:          pulseRightMotors, // Servo position right
 		Command:         common.MAV_CMD(ardupilotmega.MAV_CMD_DO_SET_SERVO),
 		TargetSystem:    0, // System ID
 		TargetComponent: 0, // Component ID
 		Confirmation:    0, // No confirmation
 	})
-	node.WriteMessageAll(&ardupilotmega.MessageCommandLong{
-		Param1:          3,     // Servo index
-		Param2:          pulse, // Servo position
+	mavlink.Node.WriteMessageAll(&ardupilotmega.MessageCommandLong{
+		Param1:          3,                     // Servo index left
+		Param2:          pulseLeftMotors + 100, // Servo position
 		Command:         common.MAV_CMD(ardupilotmega.MAV_CMD_DO_SET_SERVO),
 		TargetSystem:    0, // System ID
 		TargetComponent: 0, // Component ID
