@@ -72,7 +72,7 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGINT)
 	<-c
 	fmt.Println("\nFinalizando programa.")
-	mavlink.stopMotors()
+	chanPX4Comandos <- false
 	time.Sleep(100 * time.Millisecond)
 	os.Exit(0)
 }
@@ -159,6 +159,7 @@ func (mavlink *Mavlink) runPixhawkActuador(chanPX4Comandos <-chan bool) {
 		} else {
 			fmt.Println("GIRAR O DETENER")
 			mavlink.stopMotors()
+			// mavlink.moveLeft()
 		}
 	}
 }
@@ -179,7 +180,7 @@ func runSensor(sensor *hcsr04.HCSR04, chanSensor chan bool) error {
 			continue
 		}
 		fmt.Println("Distancia:", distance*100)
-		if (distance * 100) < 20 {
+		if (distance * 100) < 40 {
 			fmt.Println("DETECTO")
 			chanSensor <- true
 		} else {
@@ -239,21 +240,33 @@ func goduxApp(chanSensor chan bool, chanPX4 chan bool, chanPX4Comandos chan bool
 		case sensorValue := <-chanSensor:
 			fmt.Println("------------ LLEGÓ ALGO A CHAN SENSOR:  ", sensorValue)
 			// fmt.Println("Estado actual, Running:", store.GetState("Running"))
-			if !sensorValue {
-				fmt.Println("------------ CASO OMISO A CHAN SENSOR porque es false")
-				continue
-			}
-			if store.GetState("Running") == true { // Si está en movimiento y llega la alerta Sensor, lo detengo
-				newStatus := store.Dispatch(stop())
-				store.SetState("Running", newStatus)
-				fmt.Println("ALERTA Sensor!!!, Vehículo en movimiento: ", newStatus.(bool))
+			if sensorValue {
+				if store.GetState("Running") == true { // Si está en movimiento y llega la alerta Sensor, lo detengo
+					newStatus := store.Dispatch(stop())
+					store.SetState("Running", newStatus)
+					fmt.Println("ALERTA Sensor true!!!, Vehículo en movimiento: ", newStatus.(bool))
 
-				// DETENER O GIRAR ENVIANDO COMANDO
-				fmt.Println("Enviando false por canal chanPX4Comandos")
-				chanPX4Comandos <- false
+					// DETENER O GIRAR ENVIANDO COMANDO
+					fmt.Println("Enviando false por canal chanPX4Comandos")
+					chanPX4Comandos <- false
 
+				} else {
+					fmt.Println("LLegó la alerta Sensor, pero el vehículo ya se encuentra detenido")
+				}
 			} else {
-				fmt.Println("LLegó la alerta Sensor, pero el vehículo ya se encuentra detenido")
+				// El sensor no detecta nada
+				if store.GetState("Running") == false {
+					newStatus := store.Dispatch(run())
+					store.SetState("Running", newStatus)
+					fmt.Println("ALERTA Sensor false!!!, Vehículo en movimiento: ", newStatus.(bool))
+
+					// AVANZAR ENVIANDO COMANDO
+					fmt.Println("Enviando true por canal chanPX4Comandos")
+					chanPX4Comandos <- true
+				} else {
+					fmt.Println("No llega alerta Sensor, el vehículo continúa en movimiento")
+					continue
+				}
 			}
 
 		case <-chanPX4:
@@ -281,7 +294,7 @@ type Mavlink struct {
 }
 
 var fowardPulse float32 = 1900
-var backwardPulse float32 = 1800
+var backwardPulse float32 = 1725
 var stopPulse float32 = 1850
 
 func (mavlink *Mavlink) moveForward() {
